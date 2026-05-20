@@ -1,26 +1,87 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { createMcpHandler } from "agents/mcp";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { getCapabilityPage, getCurrentModel, searchDocumentation } from "./db";
+import { refreshDocs } from "./ingest";
+
+function createServer(env: Env): McpServer {
+	const server = new McpServer({
+		name: "Gemini API Docs",
+		version: "0.1.0",
+	});
+
+	server.registerTool(
+		"search_documentation",
+		{
+			description:
+				"Performs a keyword search on Gemini API documentation. Use at most 3 short queries and prefer 1-3 keywords per query.",
+			inputSchema: {
+				queries: z.array(z.string().min(1)).max(3),
+			},
+		},
+		async ({ queries }) => ({
+			content: [{ type: "text", text: await searchDocumentation(env.DB, queries) }],
+		}),
+	);
+
+	server.registerTool(
+		"get_capability_page",
+		{
+			description:
+				"Retrieves a specific documentation page by exact title. Omit capability to list available titles.",
+			inputSchema: {
+				capability: z.string().optional(),
+			},
+		},
+		async ({ capability }) => ({
+			content: [{ type: "text", text: await getCapabilityPage(env.DB, capability) }],
+		}),
+	);
+
+	server.registerTool(
+		"get_current_model",
+		{
+			description: "Returns the canonical Gemini Models documentation page when available.",
+			inputSchema: {},
+		},
+		async () => ({
+			content: [{ type: "text", text: await getCurrentModel(env.DB) }],
+		}),
+	);
+
+	return server;
+}
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
 		const url = new URL(request.url);
-		switch (url.pathname) {
-			case '/message':
-				return new Response('Hello, World!');
-			case '/random':
-				return new Response(crypto.randomUUID());
-			default:
-				return new Response('Not Found', { status: 404 });
+
+		if (url.pathname === "/healthz") {
+			return Response.json({ ok: true });
 		}
+
+		if (url.pathname === "/internal/refresh") {
+			if (!isAuthorized(request, env)) {
+				return new Response("Unauthorized", { status: 401 });
+			}
+
+			return Response.json(await refreshDocs(env));
+		}
+
+		const server = createServer(env);
+		return createMcpHandler(server, {
+			route: "/mcp",
+			enableJsonResponse: true,
+			sessionIdGenerator: undefined,
+		})(request, env, ctx);
+	},
+
+	async scheduled(_controller, env, ctx): Promise<void> {
+		ctx.waitUntil(refreshDocs(env));
 	},
 } satisfies ExportedHandler<Env>;
+
+function isAuthorized(request: Request, env: Env): boolean {
+	const token = "ADMIN_TOKEN" in env ? env.ADMIN_TOKEN : undefined;
+	return typeof token === "string" && request.headers.get("authorization") === `Bearer ${token}`;
+}

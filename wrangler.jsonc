@@ -11,14 +11,24 @@
 		"nodejs_compat",
 		"global_fetch_strictly_public"
 	],
-	"assets": {
-		// The path to the directory containing the `index.html` file to be served at `/`
-		"directory": "./public"
-	},
 	"observability": {
 		"enabled": true
 	},
-	"upload_source_maps": true
+	"upload_source_maps": true,
+	"triggers": {
+		"crons": ["0 * * * *"]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "gemini-api-docs-mcp",
+			"database_id": "REPLACE_WITH_D1_DATABASE_ID"
+		}
+	],
+	"vars": {
+		"LLMS_TXT_URL": "https://ai.google.dev/gemini-api/docs/llms.txt",
+		"REFRESH_CONCURRENCY": "6"
+	},
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -36,7 +46,7 @@
 	 * Note: Use secrets to store sensitive data.
 	 * https://developers.cloudflare.com/workers/configuration/secrets/
 	 */
-	// "vars": {  "MY_VARIABLE": "production_value" }
+	// Use `wrangler secret put ADMIN_TOKEN` to enable manual refresh requests.
 	/**
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings
