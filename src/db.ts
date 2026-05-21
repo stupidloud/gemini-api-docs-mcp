@@ -95,6 +95,7 @@ export async function searchDocumentation(db: D1Database, queries: string[]): Pr
 			 FROM docs_fts
 			 JOIN docs ON docs_fts.rowid = docs.rowid
 			 WHERE docs_fts MATCH ?1
+			 ORDER BY bm25(docs_fts, 5.0, 1.0), docs.title ASC
 			 LIMIT 3`,
 		)
 		.bind(normalized.map((query) => `(${query})`).join(" OR "))

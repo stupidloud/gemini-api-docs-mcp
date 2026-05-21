@@ -6,6 +6,7 @@ import {
 } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import worker from "../src";
+import { searchDocumentation, upsertDocument } from "../src/db";
 
 describe("Gemini Docs MCP worker", () => {
 	describe("request for /healthz", () => {
@@ -103,6 +104,32 @@ describe("Gemini Docs MCP worker", () => {
 			const response = await worker.fetch(request, env, ctx);
 			await waitOnExecutionContext(ctx);
 			expect(response.status).toBe(404);
+		});
+	});
+
+	describe("documentation search", () => {
+		it("orders results by FTS relevance with title hits first", async () => {
+			await upsertDocument(env.DOCS_DB, {
+				url: "https://example.com/content-only-ranking",
+				title: "Background guide",
+				content: "rankingtoken rankingtoken rankingtoken appears only in content",
+				content_hash: "content-only-ranking",
+				last_updated: "2026-01-01T00:00:00.000Z",
+			});
+			await upsertDocument(env.DOCS_DB, {
+				url: "https://example.com/title-ranking",
+				title: "rankingtoken guide",
+				content: "short content",
+				content_hash: "title-ranking",
+				last_updated: "2026-01-01T00:00:00.000Z",
+			});
+
+			const result = await searchDocumentation(env.DOCS_DB, ["rankingtoken"]);
+
+			expect(result.indexOf("# [rankingtoken guide]")).toBeGreaterThanOrEqual(0);
+			expect(result.indexOf("# [rankingtoken guide]")).toBeLessThan(
+				result.indexOf("# [Background guide]"),
+			);
 		});
 	});
 });
