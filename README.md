@@ -7,6 +7,7 @@ This branch is initialized with `wrangler init`, then extended with Cloudflare A
 ## Status
 
 - Remote MCP endpoint: `/mcp`
+- Production MCP endpoint: `https://gemini-docs.dev/mcp`
 - MCP handler: `createMcpHandler` from `agents/mcp`
 - Health endpoint: `/healthz`
 - Manual refresh endpoint: `/internal/refresh`

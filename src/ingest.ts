@@ -4,18 +4,9 @@ type RefreshSummary = {
 	scanned: number;
 	updated: number;
 	failed: number;
-	failures: RefreshFailure[];
 };
 
 const DEFAULT_LLMS_TXT_URL = "https://ai.google.dev/gemini-api/docs/llms.txt";
-const MAX_FAILURES = 20;
-
-type RefreshFailure = {
-	title: string;
-	url: string;
-	stage: "fetch" | "hash" | "read_existing" | "upsert";
-	message: string;
-};
 
 export async function refreshDocs(env: Env): Promise<RefreshSummary> {
 	await ensureSchema(env.DOCS_DB);
@@ -26,21 +17,16 @@ export async function refreshDocs(env: Env): Promise<RefreshSummary> {
 
 	let updated = 0;
 	let failed = 0;
-	const failures: RefreshFailure[] = [];
 
 	await runPool(links, concurrency, async ([title, sourceUrl]) => {
 		try {
 			const normalizedUrl = sourceUrl.replace(/\.md\.txt$/, "");
-			const content = await runStage("fetch", title, sourceUrl, failures, () =>
-				fetchPlainText(sourceUrl),
-			);
-			const contentHash = await runStage("hash", title, sourceUrl, failures, () => sha256(content));
-			const existing = await runStage("read_existing", title, sourceUrl, failures, () =>
-				env.DOCS_DB
-					.prepare("SELECT content_hash FROM docs WHERE url = ?1 LIMIT 1")
-					.bind(normalizedUrl)
-					.first<{ content_hash: string }>(),
-			);
+			const content = await fetchPlainText(sourceUrl);
+			const contentHash = await sha256(content);
+			const existing = await env.DOCS_DB
+				.prepare("SELECT content_hash FROM docs WHERE url = ?1 LIMIT 1")
+				.bind(normalizedUrl)
+				.first<{ content_hash: string }>();
 
 			if (existing?.content_hash === contentHash) {
 				return;
@@ -54,42 +40,15 @@ export async function refreshDocs(env: Env): Promise<RefreshSummary> {
 				last_updated: new Date().toISOString(),
 			};
 
-			await runStage("upsert", title, sourceUrl, failures, () =>
-				upsertDocument(env.DOCS_DB, doc),
-			);
+			await upsertDocument(env.DOCS_DB, doc);
 			updated += 1;
 		} catch (error) {
 			failed += 1;
-			console.error("refresh failed", { title, sourceUrl, error: errorMessage(error) });
+			console.error("refresh failed", { title, sourceUrl, error });
 		}
 	});
 
-	return { scanned: links.length, updated, failed, failures };
-}
-
-async function runStage<T>(
-	stage: RefreshFailure["stage"],
-	title: string,
-	url: string,
-	failures: RefreshFailure[],
-	action: () => Promise<T>,
-): Promise<T> {
-	try {
-		return await action();
-	} catch (error) {
-		if (failures.length < MAX_FAILURES) {
-			failures.push({ title, url, stage, message: errorMessage(error) });
-		}
-		throw error;
-	}
-}
-
-function errorMessage(error: unknown): string {
-	if (error instanceof Error) {
-		return error.message;
-	}
-
-	return String(error);
+	return { scanned: links.length, updated, failed };
 }
 
 async function fetchPlainText(url: string): Promise<string> {
