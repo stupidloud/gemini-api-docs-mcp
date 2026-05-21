@@ -15,6 +15,9 @@
 		"enabled": true
 	},
 	"upload_source_maps": true,
+	"placement": {
+		"mode": "smart"
+	},
 	"routes": [
 		{
 			"pattern": "gemini-docs.dev",
@@ -38,11 +41,6 @@
 		"LLMS_TXT_URL": "https://ai.google.dev/gemini-api/docs/llms.txt",
 		"REFRESH_CONCURRENCY": "6"
 	},
-	/**
-	 * Smart Placement
-	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
-	 */
-	// "placement": {  "mode": "smart" }
 	/**
 	 * Bindings
 	 * Bindings allow your Worker to interact with resources on the Cloudflare Developer Platform, including
