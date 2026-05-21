@@ -1,68 +1,44 @@
-# Gemini Docs MCP Server
+# Gemini API Docs MCP
 
-Cloudflare Workers implementation for a remote MCP server that serves Google Gemini API documentation over `/mcp`.
+Hosted MCP service for querying current Google Gemini API documentation, with a Gemini CLI extension manifest for easy installation.
 
-This branch is initialized with `wrangler init`, then extended with Cloudflare Agents `createMcpHandler`, D1, and scheduled refresh support.
+The public MCP endpoint is:
 
-## Status
+```text
+https://gemini-docs.dev/mcp
+```
 
-- Remote MCP endpoint: `/mcp`
-- Production MCP endpoint: `https://gemini-docs.dev/mcp`
-- MCP handler: `createMcpHandler` from `agents/mcp`
-- Health endpoint: `/healthz`
-- Manual refresh endpoint: `/internal/refresh`
-- Scheduled refresh: hourly cron
-- Storage: D1 with a `docs` table and `docs_fts` FTS5 virtual table
+This repository maintains the shared hosted documentation MCP service and its Gemini CLI extension packaging. It is not intended to guide users through running separate local deployments.
+
+## Install
+
+```bash
+gemini extensions install <github-repo-url>
+```
+
+Restart Gemini CLI after installation, then verify:
+
+```text
+/extensions list
+/mcp
+```
 
 ## Tools
 
-- `search_documentation(queries)`
-- `get_capability_page(capability)`
-- `get_current_model()`
+- `search_documentation(queries)` searches indexed Gemini API documentation.
+- `get_capability_page(capability)` retrieves a specific documentation page by title, or lists available titles when omitted.
+- `get_current_model()` retrieves the current Gemini Models documentation page when available.
 
-## Setup
+## Gemini CLI Extension
 
-Install dependencies:
+The Gemini CLI extension entrypoint is [gemini-extension.json](gemini-extension.json). It loads the hosted Streamable HTTP MCP server and [GEMINI.md](GEMINI.md) provides model-facing guidance for when to use the tools.
 
-```bash
-npm install
-```
+## Gallery Publishing
 
-Create D1:
+Gemini CLI's extension gallery automatically indexes public GitHub repositories. To make this extension discoverable:
 
-```bash
-npm run db:create
-```
+1. Add the `gemini-cli-extension` topic to the GitHub repository.
+2. Keep `gemini-extension.json` at the repository root.
+3. Tag a release, for example `v0.1.0`.
 
-Put the returned `database_id` into `wrangler.jsonc`, then run:
-
-```bash
-npm run cf-typegen
-npm run db:migrate
-npm run check
-npm test -- --run
-```
-
-Use a secret for manual refresh:
-
-```bash
-wrangler secret put ADMIN_TOKEN
-```
-
-## Development
-
-```bash
-npm run dev
-```
-
-The local MCP endpoint is:
-
-```text
-http://127.0.0.1:8787/mcp
-```
-
-## Notes
-
-- The previous Python/FastMCP/Cloud Run implementation is not present in this working tree.
-- This branch does not implement stdio mode.
-- The D1 `database_id` is still a placeholder until the real database is created.
+The gallery crawler checks tagged repositories daily and lists extensions that pass validation.

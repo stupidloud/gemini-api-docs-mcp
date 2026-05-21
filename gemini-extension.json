@@ -1,0 +1,12 @@
+{
+	"name": "gemini-api-docs",
+	"version": "0.1.0",
+	"description": "Current Gemini API documentation tools for Gemini CLI.",
+	"contextFileName": "GEMINI.md",
+	"mcpServers": {
+		"gemini-api-docs": {
+			"httpUrl": "https://gemini-docs.dev/mcp",
+			"timeout": 30000
+		}
+	}
+}
