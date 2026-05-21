@@ -15,14 +15,23 @@
 		"enabled": true
 	},
 	"upload_source_maps": true,
+	"routes": [
+		{
+			"pattern": "gemini-docs.dev",
+			"custom_domain": true
+		}
+	],
 	"triggers": {
-		"crons": ["0 * * * *"]
+		"crons": [
+			"0 * * * *"
+		]
 	},
 	"d1_databases": [
 		{
-			"binding": "DB",
+			"binding": "DOCS_DB",
 			"database_name": "gemini-api-docs-mcp",
-			"database_id": "REPLACE_WITH_D1_DATABASE_ID"
+			"database_id": "b1c8e919-8fa4-455c-a2f8-1be07f30fd62",
+			"remote": true
 		}
 	],
 	"vars": {

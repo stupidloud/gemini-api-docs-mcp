@@ -4,12 +4,21 @@ type RefreshSummary = {
 	scanned: number;
 	updated: number;
 	failed: number;
+	failures: RefreshFailure[];
 };
 
 const DEFAULT_LLMS_TXT_URL = "https://ai.google.dev/gemini-api/docs/llms.txt";
+const MAX_FAILURES = 20;
+
+type RefreshFailure = {
+	title: string;
+	url: string;
+	stage: "fetch" | "hash" | "read_existing" | "upsert";
+	message: string;
+};
 
 export async function refreshDocs(env: Env): Promise<RefreshSummary> {
-	await ensureSchema(env.DB);
+	await ensureSchema(env.DOCS_DB);
 
 	const indexUrl = env.LLMS_TXT_URL || DEFAULT_LLMS_TXT_URL;
 	const links = parseLlmsTxt(await fetchPlainText(indexUrl));
@@ -17,16 +26,21 @@ export async function refreshDocs(env: Env): Promise<RefreshSummary> {
 
 	let updated = 0;
 	let failed = 0;
+	const failures: RefreshFailure[] = [];
 
 	await runPool(links, concurrency, async ([title, sourceUrl]) => {
 		try {
 			const normalizedUrl = sourceUrl.replace(/\.md\.txt$/, "");
-			const content = await fetchPlainText(sourceUrl);
-			const contentHash = await sha256(content);
-			const existing = await env.DB
-				.prepare("SELECT content_hash FROM docs WHERE url = ?1 LIMIT 1")
-				.bind(normalizedUrl)
-				.first<{ content_hash: string }>();
+			const content = await runStage("fetch", title, sourceUrl, failures, () =>
+				fetchPlainText(sourceUrl),
+			);
+			const contentHash = await runStage("hash", title, sourceUrl, failures, () => sha256(content));
+			const existing = await runStage("read_existing", title, sourceUrl, failures, () =>
+				env.DOCS_DB
+					.prepare("SELECT content_hash FROM docs WHERE url = ?1 LIMIT 1")
+					.bind(normalizedUrl)
+					.first<{ content_hash: string }>(),
+			);
 
 			if (existing?.content_hash === contentHash) {
 				return;
@@ -40,15 +54,42 @@ export async function refreshDocs(env: Env): Promise<RefreshSummary> {
 				last_updated: new Date().toISOString(),
 			};
 
-			await upsertDocument(env.DB, doc);
+			await runStage("upsert", title, sourceUrl, failures, () =>
+				upsertDocument(env.DOCS_DB, doc),
+			);
 			updated += 1;
 		} catch (error) {
 			failed += 1;
-			console.error("refresh failed", { title, sourceUrl, error });
+			console.error("refresh failed", { title, sourceUrl, error: errorMessage(error) });
 		}
 	});
 
-	return { scanned: links.length, updated, failed };
+	return { scanned: links.length, updated, failed, failures };
+}
+
+async function runStage<T>(
+	stage: RefreshFailure["stage"],
+	title: string,
+	url: string,
+	failures: RefreshFailure[],
+	action: () => Promise<T>,
+): Promise<T> {
+	try {
+		return await action();
+	} catch (error) {
+		if (failures.length < MAX_FAILURES) {
+			failures.push({ title, url, stage, message: errorMessage(error) });
+		}
+		throw error;
+	}
+}
+
+function errorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+
+	return String(error);
 }
 
 async function fetchPlainText(url: string): Promise<string> {
@@ -69,11 +110,38 @@ function parseLlmsTxt(content: string): Array<[string, string]> {
 	return content
 		.split("\n")
 		.map((line) => line.trim())
-		.filter((line) => line.startsWith("- [") && line.includes("](") && line.includes(")"))
-		.map((line) => {
-			const [titlePart, urlPart] = line.split("](", 2);
-			return [titlePart.slice(3).trim(), urlPart.slice(0, -1).trim()];
+		.flatMap((line) => {
+			const linked = /^- \[([^\]]+)\]\((https?:\/\/[^)]+)\)(?::\s*(.*))?$/.exec(line);
+			if (linked) {
+				return [[decodeHtml(linked[1].trim()), linked[2].trim()] as [string, string]];
+			}
+
+			const bare = /^- \((https?:\/\/[^)]+)\)(?::\s*(.*))?$/.exec(line);
+			if (bare) {
+				return [[titleFromUrl(bare[1], bare[2]), bare[1].trim()] as [string, string]];
+			}
+
+			return [];
 		});
+}
+
+function titleFromUrl(url: string, description?: string): string {
+	const normalizedDescription = description?.trim();
+	if (normalizedDescription) {
+		return decodeHtml(normalizedDescription);
+	}
+
+	const pathname = new URL(url).pathname;
+	return decodeURIComponent(pathname.split("/").at(-1)?.replace(/\.md\.txt$/, "") || url);
+}
+
+function decodeHtml(text: string): string {
+	return text
+		.replaceAll("&amp;", "&")
+		.replaceAll("&quot;", '"')
+		.replaceAll("&#39;", "'")
+		.replaceAll("&lt;", "<")
+		.replaceAll("&gt;", ">");
 }
 
 async function sha256(content: string): Promise<string> {
