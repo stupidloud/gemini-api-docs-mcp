@@ -6,7 +6,7 @@ import {
 } from "cloudflare:test";
 import { describe, it, expect } from "vitest";
 import worker from "../src";
-import { searchDocumentation, upsertDocument } from "../src/db";
+import { ensureSchema, searchDocumentation, upsertDocument } from "../src/db";
 
 describe("Gemini Docs MCP worker", () => {
 	describe("request for /healthz", () => {
@@ -29,6 +29,7 @@ describe("Gemini Docs MCP worker", () => {
 
 	describe("MCP over createMcpHandler", () => {
 		it("initializes, lists tools, and calls a tool", async () => {
+			await ensureSchema(env.DOCS_DB);
 			const ctx = createExecutionContext();
 			const initResponse = await worker.fetch(
 				mcpRequest({

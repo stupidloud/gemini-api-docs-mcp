@@ -4,6 +4,8 @@ Models: Gemini-1.5 to gemini-2.0 are old legacy models. Use the newer models ava
 
 const FTS5_SPECIAL_CHARS = [".", "@", "-"];
 
+type D1Readable = Pick<D1Database | D1DatabaseSession, "prepare">;
+
 export type DocRecord = {
 	url: string;
 	title: string;
@@ -82,13 +84,12 @@ export async function upsertDocument(db: D1Database, doc: DocRecord): Promise<vo
 		.run();
 }
 
-export async function searchDocumentation(db: D1Database, queries: string[]): Promise<string> {
+export async function searchDocumentation(db: D1Readable, queries: string[]): Promise<string> {
 	const normalized = queries.map((query) => sanitizeTerm(query)).filter(Boolean).slice(0, 3);
 	if (normalized.length === 0) {
 		return "No matching documentation found.";
 	}
 
-	await ensureSchema(db);
 	const results = await db
 		.prepare(
 			`SELECT docs.title, docs.url, docs.content
@@ -112,9 +113,7 @@ export async function searchDocumentation(db: D1Database, queries: string[]): Pr
 	return `${WARNING_BANNER}\n\n${formatted.join("\n---\n\n")}`;
 }
 
-export async function getCapabilityPage(db: D1Database, capability?: string): Promise<string> {
-	await ensureSchema(db);
-
+export async function getCapabilityPage(db: D1Readable, capability?: string): Promise<string> {
 	if (!capability) {
 		const titles = await db
 			.prepare("SELECT title FROM docs ORDER BY title LIMIT 200")
@@ -135,9 +134,7 @@ export async function getCapabilityPage(db: D1Database, capability?: string): Pr
 	return page?.content ?? `Capability '${capability}' not found.`;
 }
 
-export async function getCurrentModel(db: D1Database): Promise<string> {
-	await ensureSchema(db);
-
+export async function getCurrentModel(db: D1Readable): Promise<string> {
 	const page = await db
 		.prepare(
 			`SELECT content

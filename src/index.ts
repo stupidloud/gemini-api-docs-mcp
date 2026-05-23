@@ -9,6 +9,7 @@ function createServer(env: Env): McpServer {
 		name: "Gemini API Docs",
 		version: "0.1.0",
 	});
+	const readSession = env.DOCS_DB.withSession("first-unconstrained");
 
 	server.registerTool(
 		"search_documentation",
@@ -20,7 +21,7 @@ function createServer(env: Env): McpServer {
 			},
 		},
 		async ({ queries }) => ({
-			content: [{ type: "text", text: await searchDocumentation(env.DOCS_DB, queries) }],
+			content: [{ type: "text", text: await searchDocumentation(readSession, queries) }],
 		}),
 	);
 
@@ -34,7 +35,7 @@ function createServer(env: Env): McpServer {
 			},
 		},
 		async ({ capability }) => ({
-			content: [{ type: "text", text: await getCapabilityPage(env.DOCS_DB, capability) }],
+			content: [{ type: "text", text: await getCapabilityPage(readSession, capability) }],
 		}),
 	);
 
@@ -45,7 +46,7 @@ function createServer(env: Env): McpServer {
 			inputSchema: {},
 		},
 		async () => ({
-			content: [{ type: "text", text: await getCurrentModel(env.DOCS_DB) }],
+			content: [{ type: "text", text: await getCurrentModel(readSession) }],
 		}),
 	);
 
