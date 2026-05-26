@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { getCapabilityPage, getCurrentModel, searchDocumentation } from "./db";
 import { refreshDocs } from "./ingest";
+import { getLandingHtml } from "./html";
 
 function createServer(env: Env): McpServer {
 	const server = new McpServer({
@@ -69,12 +70,24 @@ export default {
 			return Response.json(await refreshDocs(env));
 		}
 
-		const server = createServer(env);
-		return createMcpHandler(server, {
-			route: "/mcp",
-			enableJsonResponse: true,
-			sessionIdGenerator: undefined,
-		})(request, env, ctx);
+		if (url.pathname === "/" || url.pathname === "/index.html") {
+			return new Response(getLandingHtml(), {
+				headers: {
+					"content-type": "text/html; charset=utf-8",
+				},
+			});
+		}
+
+		if (url.pathname === "/mcp") {
+			const server = createServer(env);
+			return createMcpHandler(server, {
+				route: "/mcp",
+				enableJsonResponse: true,
+				sessionIdGenerator: undefined,
+			})(request, env, ctx);
+		}
+
+		return new Response("Not Found", { status: 404 });
 	},
 
 	async scheduled(_controller, env, ctx): Promise<void> {
@@ -86,3 +99,4 @@ function isAuthorized(request: Request, env: Env): boolean {
 	const token = "ADMIN_TOKEN" in env ? env.ADMIN_TOKEN : undefined;
 	return typeof token === "string" && request.headers.get("authorization") === `Bearer ${token}`;
 }
+

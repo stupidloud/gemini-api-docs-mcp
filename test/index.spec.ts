@@ -110,6 +110,7 @@ describe("Gemini Docs MCP worker", () => {
 
 	describe("documentation search", () => {
 		it("orders results by FTS relevance with title hits first", async () => {
+			await ensureSchema(env.DOCS_DB);
 			await upsertDocument(env.DOCS_DB, {
 				url: "https://example.com/content-only-ranking",
 				title: "Background guide",
